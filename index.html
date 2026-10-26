@@ -311,11 +311,21 @@
       background: #ffffff;
     }
     .bm0401-dotted-val {
-      border-bottom: 1px dotted #000000;
+      border-bottom: 1px dotted #000000 !important;
       display: inline-block;
       min-height: 14px;
       padding: 0 2px;
-      line-height: 1.15;
+      line-height: 1.25;
+      flex: 1 1 auto;
+    }
+    .bm0401-dotted-line {
+      border-bottom: 1px dotted #000000 !important;
+      display: block;
+      width: 100%;
+      min-height: 16px;
+      padding: 0 2px;
+      line-height: 1.3;
+      word-break: break-word;
     }
     .editable-print-field {
       border-bottom: 1px dashed transparent;
@@ -1147,7 +1157,7 @@
             </select>
           </div>
 
-          <div>
+          <div id="pyc-ctrl-filter-mode">
             <label class="block font-bold text-slate-700 mb-1">Chế độ chọn mẫu in:</label>
             <select id="pyc-filter-mode" onchange="handlePycModeChange()" class="w-full px-2.5 py-2 border border-slate-300 rounded-xl bg-slate-50 font-semibold text-slate-800">
               <option value="RANGE">Theo dải STT (Chuẩn ô U5-U7 Excel)</option>
@@ -1185,9 +1195,9 @@
             </div>
           </div>
 
-          <div id="pyc-ctrl-report-no" class="hidden">
-            <label class="block font-bold text-slate-700 mb-1">Chọn Số phiếu (Report No.):</label>
-            <select id="pyc-report-no-select" onchange="appState.pycPreviewPage = 'ALL'; syncCustomerPycFormFromSelectedSamples(); renderPhieuYeuCau()" class="w-full px-2.5 py-2 border border-slate-300 rounded-xl font-mono font-bold text-blue-800"></select>
+          <div id="pyc-ctrl-report-no" class="hidden sm:col-span-2">
+            <label id="pyc-ctrl-report-no-label" class="block font-bold text-blue-900 mb-1">Chọn Số phiếu cần in (Report No.):</label>
+            <select id="pyc-report-no-select" onchange="appState.pycPreviewPage = 'ALL'; syncCustomerPycFormFromSelectedSamples(true); renderPhieuYeuCau()" class="w-full px-2.5 py-2 border border-blue-300 rounded-xl bg-blue-50/40 font-mono font-bold text-blue-900 focus:ring-2 focus:ring-blue-500"></select>
           </div>
 
           <div id="pyc-ctrl-date" class="hidden">
@@ -1260,10 +1270,10 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5">
             <div>
-              <label class="block font-bold text-slate-700 mb-0.5">Số phiếu (Trái / Giữa):</label>
-              <div class="grid grid-cols-2 gap-1">
-                <input type="text" id="cust-pyc-no-left" autocomplete="off" placeholder="Số trái..." oninput="sanitizeAccidentalUrlAutofill(this); renderPhieuYeuCau()" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white font-mono">
-                <input type="text" id="cust-pyc-no-mid" autocomplete="off" placeholder="Số giữa..." oninput="sanitizeAccidentalUrlAutofill(this); renderPhieuYeuCau()" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg bg-white font-mono">
+              <label class="block font-bold text-slate-700 mb-0.5">Số phiếu hiển thị:</label>
+              <div>
+                <input type="text" id="cust-pyc-no-left" autocomplete="off" placeholder="VD: 4695/HH/2026" oninput="sanitizeAccidentalUrlAutofill(this); const mEl = document.getElementById('cust-pyc-no-mid'); if (mEl) mEl.value = this.value; renderPhieuYeuCau()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-mono font-bold text-blue-900">
+                <input type="hidden" id="cust-pyc-no-mid">
               </div>
             </div>
             <div class="lg:col-span-2">
@@ -5569,14 +5579,25 @@
       const curPkqSelVal = pkqRepSel ? pkqRepSel.value : '';
 
       if (pycRepSel) {
-        pycRepSel.innerHTML = `<option value="ALL">Tất cả số phiếu</option>` + pycRepKeys.map(k => {
+        const isCustForm = (appState.pycTemplateType === 'CUSTOMER_FORM');
+        const optionsHtml = pycRepKeys.map(k => {
           const sList = appState.totalData.filter(x => getSampleReportKey(x) === k);
           const fullCode = sList[0] ? getSampleFullReportNo(sList[0]) : k;
           const cust = isCustomerInfoMasked() ? '' : ` - ${sList[0]?.customer || ''}`;
           return `<option value="${escapeHtml(k)}">Phiếu ${escapeHtml(fullCode)} (${sList.length} mẫu${escapeHtml(cust)})</option>`;
         }).join('');
-        if (curPycVal && (curPycVal === 'ALL' || pycRepKeys.includes(curPycVal))) {
-          pycRepSel.value = curPycVal;
+        if (isCustForm) {
+          pycRepSel.innerHTML = optionsHtml || `<option value="">-- Chưa có số phiếu --</option>`;
+          if (curPycVal && curPycVal !== 'ALL' && pycRepKeys.includes(curPycVal)) {
+            pycRepSel.value = curPycVal;
+          } else if (pycRepKeys.length > 0) {
+            pycRepSel.value = pycRepKeys[0];
+          }
+        } else {
+          pycRepSel.innerHTML = `<option value="ALL">Tất cả số phiếu</option>` + optionsHtml;
+          if (curPycVal && (curPycVal === 'ALL' || pycRepKeys.includes(curPycVal))) {
+            pycRepSel.value = curPycVal;
+          }
         }
       }
 
@@ -5613,14 +5634,39 @@
       }
     }
 
+    function syncPycFilterControlsByTemplate() {
+      const isCustForm = (appState.pycTemplateType === 'CUSTOMER_FORM');
+      const modeSel = document.getElementById('pyc-filter-mode');
+      const modeWrap = document.getElementById('pyc-ctrl-filter-mode');
+      const orientEl = document.getElementById('pyc-ctrl-sec3-orient');
+
+      if (isCustForm) {
+        if (modeSel && modeSel.value !== 'REPORT_NO') {
+          modeSel.value = 'REPORT_NO';
+        }
+        if (modeWrap) modeWrap.classList.add('hidden');
+        document.getElementById('pyc-ctrl-start-stt')?.classList.add('hidden');
+        document.getElementById('pyc-ctrl-count-stt')?.classList.add('hidden');
+        document.getElementById('pyc-ctrl-report-range-start')?.classList.add('hidden');
+        document.getElementById('pyc-ctrl-report-range-end')?.classList.add('hidden');
+        document.getElementById('pyc-ctrl-date')?.classList.add('hidden');
+        document.getElementById('pyc-ctrl-report-no')?.classList.remove('hidden');
+        if (orientEl) orientEl.classList.add('hidden');
+      } else {
+        if (modeWrap) modeWrap.classList.remove('hidden');
+        if (orientEl) orientEl.classList.remove('hidden');
+        const mode = modeSel ? modeSel.value : 'RANGE';
+        document.getElementById('pyc-ctrl-start-stt')?.classList.toggle('hidden', mode !== 'RANGE');
+        document.getElementById('pyc-ctrl-count-stt')?.classList.toggle('hidden', mode !== 'RANGE');
+        document.getElementById('pyc-ctrl-report-range-start')?.classList.toggle('hidden', mode !== 'REPORT_RANGE');
+        document.getElementById('pyc-ctrl-report-range-end')?.classList.toggle('hidden', mode !== 'REPORT_RANGE');
+        document.getElementById('pyc-ctrl-report-no')?.classList.toggle('hidden', mode !== 'REPORT_NO');
+        document.getElementById('pyc-ctrl-date')?.classList.toggle('hidden', mode !== 'DATE');
+      }
+    }
+
     function handlePycModeChange() {
-      const mode = document.getElementById('pyc-filter-mode').value;
-      document.getElementById('pyc-ctrl-start-stt').classList.toggle('hidden', mode !== 'RANGE');
-      document.getElementById('pyc-ctrl-count-stt').classList.toggle('hidden', mode !== 'RANGE');
-      document.getElementById('pyc-ctrl-report-range-start').classList.toggle('hidden', mode !== 'REPORT_RANGE');
-      document.getElementById('pyc-ctrl-report-range-end').classList.toggle('hidden', mode !== 'REPORT_RANGE');
-      document.getElementById('pyc-ctrl-report-no').classList.toggle('hidden', mode !== 'REPORT_NO');
-      document.getElementById('pyc-ctrl-date').classList.toggle('hidden', mode !== 'DATE');
+      syncPycFilterControlsByTemplate();
       renderPhieuYeuCau();
     }
 
@@ -5636,6 +5682,8 @@
       }
       appState.pycTemplateType = tplType || 'INTERNAL_LAB';
       appState.pycPreviewPage = 'ALL';
+      populateReportFilterDropdowns();
+      syncPycFilterControlsByTemplate();
       switchView('yeucau');
       if (appState.pycTemplateType === 'CUSTOMER_FORM') {
         syncCustomerPycFormFromSelectedSamples(true);
@@ -5651,6 +5699,8 @@
       }
       appState.pycTemplateType = tplType || 'INTERNAL_LAB';
       appState.pycPreviewPage = 'ALL';
+      populateReportFilterDropdowns();
+      syncPycFilterControlsByTemplate();
       if (appState.pycTemplateType === 'CUSTOMER_FORM') {
         syncCustomerPycFormFromSelectedSamples(true);
       } else {
@@ -5756,7 +5806,8 @@
     }
 
     function getSelectedPycSamples() {
-      const mode = document.getElementById('pyc-filter-mode')?.value || 'RANGE';
+      const isCustForm = (appState.pycTemplateType === 'CUSTOMER_FORM');
+      const mode = isCustForm ? 'REPORT_NO' : (document.getElementById('pyc-filter-mode')?.value || 'RANGE');
       const startStt = parseInt(document.getElementById('pyc-start-stt')?.value, 10) || 1;
       const totalCount = parseInt(document.getElementById('pyc-total-count')?.value, 10) || 1;
       const endStt = startStt + totalCount - 1;
@@ -5802,8 +5853,19 @@
           });
         }
       } else if (mode === 'REPORT_NO') {
-        const repVal = document.getElementById('pyc-report-no-select')?.value || 'ALL';
-        selectedSamples = repVal === 'ALL' ? [...basePool] : appState.totalData.filter(s => getSampleReportKey(s) === repVal || getSampleFullReportNo(s) === repVal || String(s.reportNo).trim() === repVal);
+        let repVal = document.getElementById('pyc-report-no-select')?.value || (isCustForm ? '' : 'ALL');
+        if (isCustForm && (!repVal || repVal === 'ALL')) {
+          const firstSampleInPool = basePool[0] || appState.totalData[0];
+          repVal = firstSampleInPool ? getSampleReportKey(firstSampleInPool) : '';
+          const selEl = document.getElementById('pyc-report-no-select');
+          if (selEl && repVal) selEl.value = repVal;
+        }
+        selectedSamples = (!repVal || repVal === 'ALL')
+          ? (isCustForm ? [] : [...basePool])
+          : appState.totalData.filter(s => getSampleReportKey(s) === repVal || getSampleFullReportNo(s) === repVal || String(s.reportNo).trim() === repVal);
+        if (endLabel) {
+          endLabel.textContent = selectedSamples[0] ? getSampleFullReportNo(selectedSamples[0]) : (repVal || '--');
+        }
       } else if (mode === 'DATE') {
         const dVal = document.getElementById('pyc-date-select')?.value || 'ALL';
         selectedSamples = dVal === 'ALL' ? [...basePool] : basePool.filter(s => (s.dateSubmitLab || s.dateReceiveCust) === dVal);
@@ -6004,6 +6066,7 @@
       if (orientWrap) {
         orientWrap.classList.toggle('hidden', tplType === 'CUSTOMER_FORM');
       }
+      syncPycFilterControlsByTemplate();
 
       const selectedSamples = getSelectedPycSamples();
 
@@ -6198,17 +6261,17 @@
           return `
             <div data-pyc-page="${pageNum}" class="pyc-page-sheet report-paper-a4-landscape ${pageNum > 1 ? 'print-page-break' : ''} ${isHiddenOnScreen ? 'pyc-screen-hidden-page' : ''} flex flex-col justify-between" style="padding: 8mm 10mm 7mm 10mm;">
               <div>
-                <!-- Dòng tiêu đề trên cùng ngoài bảng giống hệt PDF mẫu -->
-                <div class="grid grid-cols-12 items-baseline mb-1 text-[10.5pt]">
-                  <div class="col-span-3 pl-1">
+                <!-- Dòng tiêu đề trên cùng ngoài bảng: Căn lề trái số phiếu thứ 2 thẳng hàng chính xác với vách trái cột B. YÊU CẦU THỬ NGHIỆM (28.5%) và in đậm các số phiếu -->
+                <div style="display: grid; grid-template-columns: 28.5% 30.5% 41%; width: 100%;" class="items-baseline mb-1 text-[10.5pt]">
+                  <div class="pl-0.5 font-bold">
                     <span>Số:</span>
-                    <span contenteditable="true" class="editable-print-field inline-block min-w-[72px] border-b border-black text-center font-normal">${escapeHtml(noLeft)}</span>
+                    <span contenteditable="true" class="editable-print-field inline-block min-w-[72px] border-b border-black text-center font-bold">${escapeHtml(noLeft)}</span>
                   </div>
-                  <div class="col-span-3 pl-2">
+                  <div class="pl-0 font-bold">
                     <span>Số:</span>
-                    <span contenteditable="true" class="editable-print-field inline-block min-w-[72px] border-b border-black text-center font-normal">${escapeHtml(noMid)}</span>
+                    <span contenteditable="true" class="editable-print-field inline-block min-w-[72px] border-b border-black text-center font-bold">${escapeHtml(noMid)}</span>
                   </div>
-                  <div class="col-span-6 text-center">
+                  <div class="text-center">
                     <span class="font-bold text-[12pt] uppercase tracking-tight">PHIẾU YÊU CẦU VÀ KẾT QUẢ THỬ NGHIỆM</span>
                     ${totalPagesCount > 1 ? `<span class="text-[9pt] italic font-normal ml-1">(Trang ${pageNum}/${totalPagesCount})</span>` : ''}
                   </div>
@@ -6238,11 +6301,10 @@
                         <div class="space-y-1">
                           <div>
                             <div class="flex items-baseline">
-                              <span class="font-bold shrink-0">1. Tên khách hàng</span><span>:</span>
-                              <span contenteditable="true" class="editable-print-field bm0401-dotted-val ml-1 font-semibold">${escapeHtml(clientName)}</span>
+                              <span class="font-bold shrink-0">1. Tên khách hàng:</span>
                             </div>
-                            <div contenteditable="true" class="editable-print-field bm0401-dotted-line min-h-[15px]"></div>
-                            <div class="flex items-baseline">
+                            <div contenteditable="true" class="editable-print-field bm0401-dotted-line font-semibold mt-0.5">${escapeHtml(clientName)}</div>
+                            <div class="flex items-baseline mt-0.5">
                               <span class="shrink-0">Địa chỉ:</span>
                               <span contenteditable="true" class="editable-print-field bm0401-dotted-val ml-1">${escapeHtml(clientAddr)}</span>
                             </div>
